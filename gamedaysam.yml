@@ -1,0 +1,60 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: |
+  AWS SAM template for deploying an API Gateway, Lambda function, and DynamoDB table.
+
+Resources:
+  MyDynamoDBTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: MyDynamoDBTable
+      AttributeDefinitions:
+        - AttributeName: id
+          AttributeType: S
+      KeySchema:
+        - AttributeName: id
+          KeyType: HASH
+      ProvisionedThroughput:
+        ReadCapacityUnits: 5
+        WriteCapacityUnits: 5
+
+  MyLambdaFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: MyLambdaFunction
+      Handler: app.lambda_handler
+      Runtime: python3.8
+      CodeUri: s3://wsparticipantbucket123/my-lambda-code.zip
+      MemorySize: 128
+      Timeout: 30
+      Environment:
+        Variables:
+          TABLE_NAME: !Ref MyDynamoDBTable
+      Policies:
+        - AmazonDynamoDBFullAccess
+
+  MyApi:
+    Type: AWS::Serverless::Api
+    Properties:
+      Name: MyApi
+      StageName: prod
+      DefinitionBody:
+        swagger: '2.0'
+        info:
+          title: MyApi
+          version: '1.0'
+        paths:
+          /items:
+            get:
+              x-amazon-apigateway-integration:
+                uri: !Sub
+                  - arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${MyLambdaFunction.Arn}/invocations
+                  - AWS::Region: !Ref AWS::Region
+                httpMethod: POST
+                type: aws_proxy
+      EndpointConfiguration: REGIONAL
+
+Outputs:
+  ApiUrl:
+    Description: URL for API Gateway
+    Value: !Sub https://${MyApi}.execute-api.${AWS::Region}.amazonaws.com/prod/items
